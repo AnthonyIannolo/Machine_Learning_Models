@@ -1,0 +1,158 @@
+---
+title: "Coursera Machine Learning - Course Project "
+author: "Anthony Iannolo - March 11, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+#### Introduction and Background
+#####
+###### This assignment focuses on the area of Human Activity Recognition (HAR).  HAR has gained increased attention over the past few years due to widespead applications with wearable technology. Applications include elderly monitoring, weight-loss programs and digital assistants for weight lifting exercises; this assignment is related to weight lifting exercises.
+######
+###### Furthermore, in the area of HAR using wearable devices such as Jawbone Up, Nike FuelBand and FitBit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+######
+###### In this project, the goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).  The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+######
+###### The training data for this project are available here:https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+######
+###### The test data are available here:https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+###### 
+######
+#### Executive Summary
+#####
+###### To complete this assignment the following steps were taken:
+######  1: Read, explore and clean the datasets
+######  2: Split provided training dataset into training and test datasets.  Later use the supplied test dataset as the validation dataset. 
+######  3: Run Decision Tree and Random Forest Models against the data using cross validation.
+######  4: Select the best model and perform predictions against the validation data.
+#####
+###### After performing the analysis the Random Forest Model was the best predictor of outcomes against the test dataset with an accuracy of 99.32% and out-of-sample error of 0.68%.  Further coding and details are included in the below report.
+#####
+##### Step 1: Read, explore and clean the datasets
+####### In this section the relevant R libraries are loaded and the provided training and test datasets read in.  After assessing the data, there are many variables with missing values so they are removed.  In additon, variables with near zero variance are removed.  Lastly, the first seven variables contain items such as timestamps and usernames which are not useful for the models so they are removed too.
+```{r,echo=TRUE, results='hide'}
+library(caret)
+library(rattle)
+library(randomForest)
+set.seed(11111)
+```
+
+```{r,echo=TRUE, results='hide'}
+##  Variable that specifies the path to the downloaded data from UCI
+##
+data_folder <- "/Users/anthonyiannolo/Machine Learning - Course 8/"
+##  Create strings to subsequently read the data
+##
+pml_train_string <- paste(data_folder,"pml-training.csv",sep="")
+pml_test_string <- paste(data_folder,"pml-testing.csv", sep="")
+##  Read the Training and Test Data & use the pml_test dataset for validation
+##
+pml_train <- read.csv(pml_train_string, header=T)
+pml_validation <- read.csv(pml_test_string, header=T)
+##  Review the varibles within the dataset
+##
+str(pml_train)
+str(pml_validation)
+head(pml_train)
+head(pml_validation)
+```
+
+```{r,echo=TRUE}
+##  Remove variables that contain missing values and review results
+##
+train_init<- pml_train[, colSums(is.na(pml_train)) == 0]
+validation <- pml_validation[, colSums(is.na(pml_validation)) == 0]
+
+dim(train_init)
+dim(validation)
+```
+
+```{r,echo=TRUE}
+##  Remove variables that have near zero variance
+##
+NZV_train <- nearZeroVar(train_init)
+train_init <- train_init[, -NZV_train]
+dim(train_init)
+
+NZV_validation <- nearZeroVar(validation)
+validation <- validation[, -NZV_validation]
+dim(validation)
+```
+
+```{r,echo=TRUE} 
+##  Remove the first seven variables as they will not influence the outcome of classe
+##
+train_init <- train_init[, -c(1:7)]
+validation<- validation[, -c(1:7)]
+dim(train_init)
+dim(validation)
+##  These are the variables that will be used to generate the models
+##
+names(train_init[1:(length(train_init)-1)])
+```
+##### Step 2: Split provided training dataset into training and test datasets.
+####### Here the provided training dataset is split into separate training and test datasets.  This will allow perfroming the modeling against separate observations in the newly created training set.  Subsequently, predictions can be performed against the test data set.  Note the initial testing dataset provided is reserved for use as the future validation data set.
+```{r,echo=TRUE} 
+##  Split the training dataset into training and test data sets
+##
+training_split <- createDataPartition(y=train_init$classe, p=0.7, list=FALSE)
+training <- train_init[training_split, ]
+testing <- train_init[-training_split, ]
+```
+##### Step 3: Run Decision Tree and Random Forest Models against the data using cross validation.
+####### First parameters for K-fold cross validation are defined as they will be used for the model building.  Next the Decision Tree and Random Forest Models are run.  For each of these the predict function is used for the models against the training datasets and confusion matrix is produced.  The confusion matrix and plots reveals the Random Forest is the superior model with an accuracy of 99.32% compared to the Decision Tree with an accuracy of 55.92%.
+```{r,echo=TRUE} 
+##  Now lets run the models
+##  Use parameter below to perform K-Fold cross validation
+modControl <- trainControl(method='cv', number = 3)
+```
+
+```{r,echo=TRUE} 
+## Decision Tree Model
+##
+model_tree <- train(classe ~ ., data=training, method='rpart', trControl=modControl)
+fancyRpartPlot(model_tree$finalModel)
+model_tree
+
+## How does the Decision Tree fit on test data
+##
+predict_tree <- predict(model_tree, testing, type = "raw")
+confusion_mtrx_tree <- confusionMatrix(predict_tree, testing$classe)
+confusion_mtrx_tree
+```
+
+```{r,echo=TRUE} 
+## Random Forest Model
+##
+model_rf <- train(classe ~ ., data=training,  method='rf', trControl=modControl, ntree=100)
+model_rf$finalModel
+
+## How does random forest fit on test data
+##
+predict_rf <- predict(model_rf, newdata=testing)
+confusion_mtrx_rf <- confusionMatrix(predict_rf, testing$classe)
+confusion_mtrx_rf
+```
+##### Step 4: Select the best model and perform predictions against the validation data.
+####### The Random Forest model reveals itself as the superior model and the following plots furhter bear that out.  Lastly, the Random Forest Model is applied to the validation dataset.  These results were in line with the expectations for the course prediction quiz.
+```{r,echo=TRUE} 
+## Plot Model and confusion matrix results
+##
+plot(model_rf)
+
+plot(confusion_mtrx_rf$table, col = confusion_mtrx_rf$byClass, 
+        main = paste("Decision Tree Model Accuracy =", 
+        round(confusion_mtrx_rf$overall['Accuracy'], 4)))
+```
+
+```{r,echo=TRUE} 
+## Apply the Random Forest Model to the Validation dataset and print results
+##
+validation_test <- predict(model_rf, newdata=validation)
+
+Validation_output<- data.frame(problem_id=validation$problem_id, predicted=validation_test)
+print(Validation_output)
+```
